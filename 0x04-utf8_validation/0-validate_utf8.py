@@ -1,59 +1,61 @@
 #!/usr/bin/python3
-
+"""UTF-8 validation module.
 """
- this module contains one function validate if
- a string is a valid utf8 string
-"""
-NUMBER_OF_BITS_PER_BLOCK = 8
-MAX_NUMBER_OF_ONES = 4
 
 
 def validUTF8(data):
+    """Checks if a list of integers are valid UTF-8 codepoints.
+    See <https://datatracker.ietf.org/doc/html/rfc3629#page-4>
     """
-    :type data: List[int]
-    :rtype: bool
-    """
-    index = 0
-    while index < len(data):
-        number = data[index] & (2 ** 7)
-        number >>= NUMBER_OF_BITS_PER_BLOCK - 1
-        if number == 0:  # single byte char
-            index += 1
+    skip = 0
+    n = len(data)
+    for i in range(n):
+        if skip > 0:
+            skip -= 1
             continue
-
-        # validate multi-byte char
-        number_of_ones = 0
-        while True:  # get the number of significant ones
-            number = data[index] & (2 ** (7 - number_of_ones))
-            number >>= NUMBER_OF_BITS_PER_BLOCK - number_of_ones - 1
-            if number == 1:
-                number_of_ones += 1
-            else:
-                break
-
-            if number_of_ones > MAX_NUMBER_OF_ONES:
-                return False  # too much ones per char sequence
-
-        if number_of_ones == 1:
-            return False  # there has to be at least 2 ones
-
-        index += 1
-
-        # check for out of bounds and exit early
-        if index >= len(data) or index >= (index + number_of_ones - 1):
+        if type(data[i]) != int or data[i] < 0 or data[i] > 0x10ffff:
             return False
-
-        # every next byte has to start with "10"
-        for i in range(index, index + number_of_ones - 1):
-            number = data[i]
-
-            number >>= NUMBER_OF_BITS_PER_BLOCK - 1
-            if number != 1:
+        elif data[i] <= 0x7f:
+            skip = 0
+        elif data[i] & 0b11111000 == 0b11110000:
+            # 4-byte utf-8 character encoding
+            span = 4
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
                 return False
-            number >>= NUMBER_OF_BITS_PER_BLOCK - 1
-            if number != 0:
+        elif data[i] & 0b11110000 == 0b11100000:
+            # 3-byte utf-8 character encoding
+            span = 3
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
                 return False
-
-            index += 1
-
+        elif data[i] & 0b11100000 == 0b11000000:
+            # 2-byte utf-8 character encoding
+            span = 2
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
+                return False
+        else:
+            return False
     return True
